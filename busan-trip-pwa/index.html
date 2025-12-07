@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>釜山旅遊手帳</title>
+    
+    <!-- PWA 設定 (使用相對路徑 ./ 以支援 GitHub Pages) -->
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#FDFBF7">
+    <link rel="apple-touch-icon" href="./icon-192.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #FDFBF7; color: #2C2C2C; -webkit-tap-highlight-color: transparent; }
+        .font-serif { font-family: 'Playfair Display', serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .modal-enter { animation: slideUp 0.3s ease-out forwards; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        #ios-install-prompt { transition: transform 0.3s ease-in-out; }
+    </style>
+</head>
+<body class="pb-24">
+
+    <!-- PWA 安裝提示 (針對 iOS Safari) -->
+    <div id="ios-install-prompt" class="hidden fixed bottom-0 left-0 right-0 bg-white p-4 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] z-[70] border-t border-gray-200 pb-8">
+        <div class="flex items-start gap-4">
+            <img src="./icon-192.png" class="w-12 h-12 rounded-xl shadow-md" alt="App Icon">
+            <div class="flex-1">
+                <p class="text-sm font-bold text-gray-800">安裝「釜山旅遊手帳」</p>
+                <p class="text-xs text-gray-500 mt-1">點擊下方工具列的分享按鈕 <i data-lucide="share" class="inline w-3 h-3 text-blue-500"></i>，然後選擇「加入主畫面」。</p>
+            </div>
+            <button onclick="document.getElementById('ios-install-prompt').classList.add('hidden')" class="text-gray-400 p-2"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+    </div>
+
+    <!-- 1. Header & Dashboard -->
+    <header class="sticky top-0 z-30 bg-[#FDFBF7]/95 backdrop-blur-md px-6 pt-6 pb-4 border-b border-dashed border-gray-200 shadow-sm">
+        <div class="flex justify-between items-start">
+            <div>
+                <div class="flex items-center gap-2 text-gray-400 text-xs font-mono mb-1">
+                    <i data-lucide="clock" class="w-3 h-3"></i>
+                    <span id="current-time">--:--</span>
+                    <span class="w-px h-3 bg-gray-300 mx-1"></span>
+                    <span>Busan, KR</span>
+                </div>
+                <h1 class="text-2xl font-serif font-bold text-gray-800" id="greeting">Hello</h1>
+                <div id="api-status" class="mt-1 flex items-center gap-1 text-[10px] text-gray-400 font-medium">
+                    <span class="w-2 h-2 rounded-full bg-gray-300"></span> 離線模式
+                </div>
+            </div>
+            <div class="bg-white border border-gray-100 p-2 rounded-2xl shadow-sm text-center min-w-[70px]">
+                <i data-lucide="cloud-sun" class="w-6 h-6 text-orange-400 mx-auto mb-1"></i>
+                <div class="text-sm font-bold text-gray-700">18°C</div>
+            </div>
+        </div>
+        <button onclick="app.resetData()" class="text-[10px] text-gray-400 underline mt-2 hover:text-red-500">重置資料</button>
+    </header>
+
+    <!-- 2. Checklist -->
+    <div class="px-6 py-4">
+        <h2 class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">行前清單</h2>
+        <div id="checklist-container" class="flex overflow-x-auto gap-2 pb-2 no-scrollbar"></div>
+    </div>
+
+    <!-- 3. Tabs -->
+    <div class="sticky top-[110px] z-20 px-6 py-2 bg-[#FDFBF7]">
+        <div id="day-tabs" class="flex gap-2 overflow-x-auto no-scrollbar"></div>
+    </div>
+
+    <!-- 4. Itinerary Feed -->
+    <div id="itinerary-feed" class="px-6 mt-4 space-y-6 relative border-l-2 border-gray-200 ml-9 pl-6 min-h-[300px]"></div>
+    
+    <div class="text-center py-10 text-gray-300 text-xs tracking-widest uppercase">End of Trip</div>
+
+    <!-- 5. Floating Buttons -->
+    <div class="fixed bottom-24 right-6 z-40">
+        <button onclick="app.openModal('add-modal')" class="bg-[#2C2C2C] text-white w-14 h-14 rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center border-2 border-white/20">
+            <i data-lucide="plus" class="w-6 h-6"></i>
+        </button>
+    </div>
+
+    <div class="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 px-6 py-3 z-50 flex justify-between items-center shadow-lg safe-area-pb">
+        <div class="flex gap-1" id="footer-tabs"></div>
+        <button onclick="app.openModal('wallet-modal')" class="flex items-center gap-2 bg-orange-100 text-orange-800 px-4 py-2 rounded-full text-xs font-bold hover:bg-orange-200 transition-colors">
+            <i data-lucide="wallet" class="w-4 h-4"></i>
+            <span id="footer-total" class="font-mono">₩0</span>
+        </button>
+    </div>
+
+    <!-- Modals: Add Stop -->
+    <div id="add-modal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="app.closeModal('add-modal')"></div>
+        <div class="absolute bottom-0 left-0 right-0 bg-white rounded-t-[2rem] p-6 modal-enter">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold font-serif text-gray-800">新增行程</h3>
+                <button onclick="app.closeModal('add-modal')" class="p-2 bg-gray-100 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <form onsubmit="app.handleAddStop(event)" class="space-y-4">
+                <div class="flex gap-2">
+                    <input type="time" id="add-time" required class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm w-32 outline-none focus:border-orange-500 font-mono" value="12:00">
+                    <select id="add-tag" class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 text-sm outline-none focus:border-orange-500">
+                        <option value="景點">景點</option>
+                        <option value="美食">美食</option>
+                        <option value="購物">購物</option>
+                        <option value="交通">交通</option>
+                        <option value="彈性">彈性</option>
+                    </select>
+                </div>
+                <input type="text" id="add-title" placeholder="標題" required class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-500">
+                <input type="text" id="add-location" placeholder="地點" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-500">
+                <button type="submit" class="w-full bg-[#2C2C2C] text-white font-bold py-4 rounded-xl mt-2 shadow-lg flex items-center justify-center gap-2">
+                    <i data-lucide="save" class="w-4 h-4"></i> 保存
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modals: Wallet -->
+    <div id="wallet-modal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="app.closeModal('wallet-modal')"></div>
+        <div class="absolute bottom-0 left-0 right-0 bg-[#FDFBF9] rounded-t-[2.5rem] h-[85vh] flex flex-col modal-enter">
+            <div class="w-full flex justify-center pt-4 pb-2" onclick="app.closeModal('wallet-modal')"><div class="w-12 h-1.5 bg-gray-200 rounded-full"></div></div>
+            <div class="px-8 pt-4 pb-6 flex items-center justify-between">
+                <div><h2 class="text-2xl font-serif text-[#2C2C2C]">旅遊記帳</h2><p class="text-xs text-gray-400 mt-1 uppercase tracking-wider">自動同步</p></div>
+                <button onclick="app.closeModal('wallet-modal')" class="p-2 bg-gray-100 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="px-8 mb-6">
+                <div class="bg-[#2C2C2C] text-[#F7F5F0] rounded-2xl p-6 shadow-xl">
+                    <div class="flex justify-between items-start mb-4">
+                        <div><p class="text-xs text-gray-400 uppercase tracking-widest mb-1">總花費</p><h3 class="text-3xl font-mono" id="wallet-total">₩0</h3></div>
+                        <div class="text-right"><p class="text-xs text-gray-400 uppercase tracking-widest mb-1">人均</p><h3 class="text-xl font-mono text-orange-200" id="wallet-per-person">₩0</h3></div>
+                    </div>
+                    <div class="flex items-center gap-3 bg-white/10 p-2 rounded-xl w-fit">
+                        <button onclick="app.changeHeadCount(-1)" class="w-8 h-8 flex items-center justify-center bg-white/10 rounded-lg hover:bg-white/20">-</button>
+                        <span class="text-sm font-bold w-12 text-center" id="head-count-display">3 人</span>
+                        <button onclick="app.changeHeadCount(1)" class="w-8 h-8 flex items-center justify-center bg-white/10 rounded-lg hover:bg-white/20">+</button>
+                    </div>
+                </div>
+            </div>
+            <div class="px-8 mb-6 flex gap-3">
+                <div class="flex-1 flex flex-col gap-2">
+                    <input type="text" id="exp-title" placeholder="項目" class="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-900">
+                    <input type="number" id="exp-amount" placeholder="金額 (₩)" class="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-900">
+                </div>
+                <button onclick="app.addExpense()" class="bg-orange-900 text-white w-14 rounded-xl flex items-center justify-center shadow-lg hover:bg-orange-800"><i data-lucide="plus" class="w-6 h-6"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto px-8 pb-8 space-y-3" id="expense-list"></div>
+        </div>
+    </div>
+
+    <!-- JS Logic -->
+    <script>
+        // ⚠️ 如果您有部屬 Google Apps Script，請填入網址。若無則留空，App 會以「純離線模式」運作。
+        const API_URL = ""; 
+
+        const app = {
+            data: { activeDay: 'day1', headCount: 3, checkedItems: {}, expenses: [], itinerary: {} },
+            
+            // 🔥 小紅書熱門行程預設資料
+            defaultItinerary: {
+                day1: { id: 'day1', title: '第 1 天', subtitle: '南浦風情', stops: [
+                    { id: 101, time: "10:00", title: "抵達飯店 & 放行李", desc: "建議住西面站，交通最方便。", tag: "交通", location: "西面站", mapLink: "https://map.naver.com/p/search/서면역", isImportant: false },
+                    { id: 102, time: "11:30", title: "松亭三代豬肉湯飯", desc: "必吃！湯頭濃郁，記得加大量韭菜。", tag: "美食", location: "豬肉湯飯街", mapLink: "https://map.naver.com/p/search/서면돼지국밥골목", isImportant: false },
+                    { id: 103, time: "14:00", title: "白淺灘文化村", desc: "必拍海岸隧道剪影，韓版聖托里尼。", tag: "景點", location: "白淺灘文化村", mapLink: "https://map.naver.com/p/search/흰여울문화마을", isImportant: true, isSpecial: true },
+                    { id: 104, time: "18:00", title: "BIFF 廣場", desc: "晚餐吃路邊攤，必吃元祖黑糖餅。", tag: "美食", location: "BIFF廣場", mapLink: "https://map.naver.com/p/search/BIFF광장", isImportant: false }
+                ]},
+                day2: { id: 'day2', title: '第 2 天', subtitle: '海雲台', stops: [
+                    { id: 201, time: "10:30", title: "天空膠囊列車", desc: "需預約！繽紛小火車配海景。", tag: "景點", location: "尾浦站", mapLink: "https://map.naver.com/p/search/해운대블루라인파크", isImportant: true, isSpecial: true },
+                    { id: 202, time: "13:00", title: "青沙浦烤貝", desc: "邊看海邊吃現烤扇貝。", tag: "美食", location: "青沙浦", mapLink: "https://map.naver.com/p/search/청사포조개구이", isImportant: false },
+                    { id: 203, time: "15:00", title: "灌籃高手平交道", desc: "拍列車經過瞬間。", tag: "景點", location: "青沙浦", mapLink: "https://map.naver.com/p/search/청사포", isImportant: false },
+                    { id: 204, time: "19:00", title: "The Bay 101", desc: "摩天大樓夜景，拍倒影。", tag: "景點", location: "The Bay 101", mapLink: "https://map.naver.com/p/search/더베이101", isImportant: false }
+                ]},
+                day3: { id: 'day3', title: '第 3 天', subtitle: '廣安里', stops: [
+                    { id: 301, time: "10:00", title: "Spa Land 汗蒸幕", desc: "五星級設施，必喝甜米釀。", tag: "彈性", location: "新世界百貨", mapLink: "https://map.naver.com/p/search/스파랜드", isImportant: false },
+                    { id: 302, time: "16:00", title: "廣安里海景咖啡", desc: "找間咖啡廳躺著看海。", tag: "彈性", location: "廣安里", mapLink: "https://map.naver.com/p/search/광안리해수욕장", isImportant: false },
+                    { id: 303, time: "20:00", title: "廣安大橋夜景", desc: "週六有無人機秀。", tag: "景點", location: "廣安大橋", mapLink: "https://map.naver.com/p/search/광안대교", isImportant: true }
+                ]},
+                day4: { id: 'day4', title: '第 4 天', subtitle: '返程', stops: [
+                    { id: 401, time: "11:00", title: "田浦咖啡街", desc: "文創小店與選物店。", tag: "購物", location: "田浦站", mapLink: "https://map.naver.com/p/search/전포카페거리", isImportant: false },
+                    { id: 402, time: "16:00", title: "前往機場", desc: "搭計程車去金海機場。", tag: "交通", location: "金海機場", mapLink: "https://map.naver.com/p/search/김해국제공항", isImportant: false }
+                ]},
+            },
+            checklistItems: [{id: 'esim', label: 'eSIM'}, {id: 'passport', label: '護照'}, {id: 'wowpass', label: 'WOWPASS'}, {id: 'adapter', label: '轉接頭'}, {id: 'power', label: '行動電源'}],
+
+            async init() {
+                // Register Service Worker (使用相對路徑 ./ 以支援 GitHub Pages)
+                if ('serviceWorker' in navigator) {
+                    try { await navigator.serviceWorker.register('./sw.js'); console.log('SW Registered'); } 
+                    catch (e) { console.log('SW Failed', e); }
+                }
+
+                // iOS Install Prompt Logic
+                const isIos = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+                const isInStandaloneMode = ('standalone' in window.navigator) && (window.navigator.standalone);
+                if (isIos && !isInStandaloneMode) {
+                    document.getElementById('ios-install-prompt').classList.remove('hidden');
+                }
+
+                // Load Data
+                this.loadLocalData();
+                this.renderAll();
+                
+                // API Sync Check
+                if (API_URL && API_URL.includes("script.google.com")) {
+                    document.getElementById('api-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span> 同步中...';
+                    await this.fetchCloudData();
+                }
+
+                setInterval(this.updateTime, 1000);
+                this.updateTime();
+            },
+
+            loadLocalData() {
+                this.data.itinerary = JSON.parse(localStorage.getItem('busan_itinerary')) || this.defaultItinerary;
+                this.data.expenses = JSON.parse(localStorage.getItem('busan_expenses')) || [];
+                this.data.checkedItems = JSON.parse(localStorage.getItem('busan_checklist')) || {};
+            },
+
+            async fetchCloudData() {
+                try {
+                    const res = await fetch(`${API_URL}?action=get_data`);
+                    const cloudData = await res.json();
+                    if (cloudData.success) {
+                        this.data.expenses = cloudData.expenses.map(e => ({...e, amount: Number(e.amount), id: Number(e.id)}));
+                        if (cloudData.stops.length > 0) {
+                            let newItinerary = JSON.parse(JSON.stringify(this.defaultItinerary));
+                            cloudData.stops.forEach(stop => {
+                                const dayId = stop.dayId || 'day1';
+                                if(newItinerary[dayId]) {
+                                    newItinerary[dayId].stops.push({
+                                        ...stop, id: Number(stop.id),
+                                        isImportant: String(stop.isImportant) === 'TRUE',
+                                        isSpecial: String(stop.isSpecial) === 'TRUE'
+                                    });
+                                }
+                            });
+                            Object.keys(newItinerary).forEach(k => { newItinerary[k].stops.sort((a,b) => a.time.localeCompare(b.time)); });
+                            this.data.itinerary = newItinerary;
+                        }
+                        this.saveLocal();
+                        this.renderAll();
+                        document.getElementById('api-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> 雲端已同步';
+                    }
+                } catch (e) {
+                    console.error(e);
+                    document.getElementById('api-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> 同步失敗';
+                }
+            },
+
+            saveLocal() {
+                localStorage.setItem('busan_itinerary', JSON.stringify(this.data.itinerary));
+                localStorage.setItem('busan_expenses', JSON.stringify(this.data.expenses));
+                localStorage.setItem('busan_checklist', JSON.stringify(this.data.checkedItems));
+            },
+
+            // --- UI Rendering ---
+            renderAll() { this.renderChecklist(); this.renderTabs(); this.renderItinerary(); this.renderWallet(); lucide.createIcons(); },
+            
+            renderChecklist() {
+                document.getElementById('checklist-container').innerHTML = this.checklistItems.map(item => {
+                    const isChecked = this.data.checkedItems[item.id];
+                    return `<button onclick="app.toggleCheck('${item.id}')" class="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors whitespace-nowrap flex items-center gap-1 ${isChecked ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200'}">${isChecked ? '<i data-lucide="check" class="w-3 h-3"></i>' : ''} ${item.label}</button>`;
+                }).join('');
+            },
+
+            renderTabs() {
+                document.getElementById('day-tabs').innerHTML = Object.values(this.data.itinerary).map(day => 
+                    `<button onclick="app.setDay('${day.id}')" class="px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${this.data.activeDay === day.id ? 'bg-gray-800 text-white shadow-md' : 'bg-white text-gray-400 border border-gray-100'}">${day.title}</button>`
+                ).join('');
+                document.getElementById('footer-tabs').innerHTML = Object.values(this.data.itinerary).map(day => 
+                    `<button onclick="app.setDay('${day.id}')" class="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${this.data.activeDay === day.id ? 'bg-gray-800 text-white scale-110' : 'bg-gray-100 text-gray-400'}">${day.id.replace('day', 'D')}</button>`
+                ).join('');
+            },
+
+            renderItinerary() {
+                const stops = this.data.itinerary[this.data.activeDay].stops;
+                const container = document.getElementById('itinerary-feed');
+                if (stops.length === 0) { container.innerHTML = `<div class="text-center text-gray-300 text-sm py-10">點擊右下角 + 新增行程</div>`; return; }
+                
+                container.innerHTML = stops.map(stop => `
+                    <div class="relative group fade-in mb-6">
+                        <div class="absolute -left-[31px] top-0 w-3 h-3 rounded-full border-2 border-[#FDFBF7] ${stop.isImportant ? 'bg-orange-500 scale-125' : 'bg-gray-300'}"></div>
+                        <div class="bg-white p-5 rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-gray-50 relative">
+                            <button onclick="app.deleteStop(${stop.id})" class="absolute top-3 right-3 text-gray-300 hover:text-red-400"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            <div class="flex justify-between items-start mb-2 pr-6">
+                                <span class="bg-gray-100 text-gray-500 text-[10px] font-mono px-2 py-0.5 rounded">${stop.time}</span>
+                                <div class="flex gap-1">
+                                    ${stop.isSpecial ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-pink-100 text-pink-500 font-bold">🔥 小紅書</span>' : ''}
+                                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-50 text-gray-400">#${stop.tag}</span>
+                                </div>
+                            </div>
+                            <h3 class="text-lg font-bold text-gray-800 mb-1">${stop.title}</h3>
+                            <p class="text-sm text-gray-500 leading-relaxed font-light mb-3 line-clamp-2">${stop.desc}</p>
+                            ${stop.note ? `<div class="bg-yellow-50/50 p-2 rounded-lg mb-3 flex items-start gap-2"><i data-lucide="sticky-note" class="w-3 h-3 text-yellow-500 mt-0.5 flex-shrink-0"></i><p class="text-xs text-gray-600">${stop.note}</p></div>` : ''}
+                            <div class="flex items-center gap-2 mt-3 pt-3 border-t border-gray-50">
+                                <a href="${stop.mapLink || '#'}" target="_blank" class="flex items-center gap-1 text-xs font-bold text-gray-400 hover:text-blue-600 transition-colors" onclick="event.stopPropagation();"><i data-lucide="map-pin" class="w-3 h-3"></i> ${stop.location || '位置'}</a>
+                            </div>
+                        </div>
+                    </div>`).join('');
+            },
+
+            renderWallet() {
+                const total = this.data.expenses.reduce((sum, item) => sum + item.amount, 0);
+                const perPerson = Math.round(total / this.data.headCount);
+                document.getElementById('footer-total').innerText = `₩${total.toLocaleString()}`;
+                document.getElementById('wallet-total').innerText = `₩${total.toLocaleString()}`;
+                document.getElementById('wallet-per-person').innerText = `₩${perPerson.toLocaleString()}`;
+                document.getElementById('head-count-display').innerText = `${this.data.headCount} 人`;
+                const list = document.getElementById('expense-list');
+                if(this.data.expenses.length === 0) list.innerHTML = '<p class="text-center text-gray-400 text-xs mt-4">尚無記帳</p>';
+                else list.innerHTML = this.data.expenses.map(exp => `<div class="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-50 shadow-sm fade-in"><div><p class="font-bold text-[#2C2C2C] text-sm">${exp.title}</p><p class="text-xs text-gray-400 font-mono">₩ ${exp.amount.toLocaleString()}</p></div><button onclick="app.deleteExpense(${exp.id})" class="text-gray-300 hover:text-red-400"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`).join('');
+            },
+
+            // --- Actions ---
+            toggleCheck(id) { this.data.checkedItems[id] = !this.data.checkedItems[id]; this.saveLocal(); this.renderChecklist(); },
+            setDay(dayId) { this.data.activeDay = dayId; this.renderAll(); window.scrollTo({top: 0, behavior: 'smooth'}); },
+            openModal(id) { document.getElementById(id).classList.remove('hidden'); },
+            closeModal(id) { document.getElementById(id).classList.add('hidden'); },
+            
+            async handleAddStop(e) {
+                e.preventDefault();
+                const title = document.getElementById('add-title').value;
+                const time = document.getElementById('add-time').value;
+                const location = document.getElementById('add-location').value;
+                const tag = document.getElementById('add-tag').value;
+                const newStop = { id: Date.now(), dayId: this.data.activeDay, time, title, location, tag, desc: "自訂行程", mapLink: `https://map.naver.com/p/search/${location}`, note: "", isImportant: false, isSpecial: false };
+                this.data.itinerary[this.data.activeDay].stops.push(newStop);
+                this.data.itinerary[this.data.activeDay].stops.sort((a,b) => a.time.localeCompare(b.time));
+                this.saveLocal(); this.renderItinerary(); this.closeModal('add-modal');
+                if (API_URL) fetch(`${API_URL}?action=add_stop`, { method: 'POST', body: JSON.stringify(newStop) }).catch(console.error);
+                document.getElementById('add-title').value = ''; document.getElementById('add-location').value = '';
+            },
+
+            deleteStop(id) {
+                if(!confirm('確定刪除此行程？')) return;
+                this.data.itinerary[this.data.activeDay].stops = this.data.itinerary[this.data.activeDay].stops.filter(s => s.id !== id);
+                this.saveLocal(); this.renderItinerary();
+            },
+
+            async addExpense() {
+                const title = document.getElementById('exp-title').value;
+                const amount = parseInt(document.getElementById('exp-amount').value);
+                if(!title || isNaN(amount)) return;
+                const newExp = { id: Date.now(), title, amount, stopId: null };
+                this.data.expenses.push(newExp);
+                this.saveLocal(); this.renderWallet();
+                document.getElementById('exp-title').value = ''; document.getElementById('exp-amount').value = '';
+                if (API_URL) fetch(`${API_URL}?action=add_expense`, { method: 'POST', body: JSON.stringify(newExp) }).catch(console.error);
+            },
+
+            deleteExpense(id) {
+                if(!confirm('刪除?')) return;
+                this.data.expenses = this.data.expenses.filter(e => e.id !== id);
+                this.saveLocal(); this.renderWallet();
+            },
+
+            changeHeadCount(delta) { const n = this.data.headCount + delta; if(n>=1) { this.data.headCount = n; this.renderWallet(); } },
+            
+            resetData() {
+                if(confirm('確定重置所有資料？')) {
+                    localStorage.clear();
+                    location.reload();
+                }
+            },
+
+            updateTime() {
+                const now = new Date();
+                document.getElementById('current-time').innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const h = now.getHours();
+                document.getElementById('greeting').innerText = h < 12 ? '早安' : h < 18 ? '午安' : '晚安';
+            }
+        };
+
+        window.onload = () => app.init();
+    </script>
+</body>
+</html>
