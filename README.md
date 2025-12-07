@@ -1,4 +1,3 @@
-#我的韓國自由行
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
